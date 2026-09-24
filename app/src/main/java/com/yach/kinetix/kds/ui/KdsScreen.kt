@@ -1,4 +1,4 @@
-package com.yach.kinetix.kds.ui
+﻿package com.yach.kinetix.kds.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -12,6 +12,9 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -20,6 +23,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.yach.kinetix.backofhouse.ui.KdsViewModel
+import com.yach.kinetix.backofhouse.ui.KdsOrderCardUiModel
+import com.yach.kinetix.backofhouse.ui.KdsSlaStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -28,6 +34,8 @@ fun KdsScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val stations = listOf("Todas", "Parrilla", "Mesa Fría", "Bebidas", "Postres")
+    var selectedStationIndex by remember { mutableIntStateOf(0) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -48,18 +56,18 @@ fun KdsScreen(
         ) {
             // Barra de Estaciones (Filtros)
             ScrollableTabRow(
-                selectedTabIndex = uiState.selectedStationIndex,
+                selectedTabIndex = selectedStationIndex,
                 edgePadding = 16.dp,
                 containerColor = MaterialTheme.colorScheme.surface
             ) {
-                uiState.stations.forEachIndexed { index, stationName ->
+                stations.forEachIndexed { index, stationName ->
                     Tab(
-                        selected = uiState.selectedStationIndex == index,
-                        onClick = { viewModel.selectStation(index) },
+                        selected = selectedStationIndex == index,
+                        onClick = { selectedStationIndex = index },
                         text = { 
                             Text(
                                 text = stationName,
-                                fontWeight = if (uiState.selectedStationIndex == index) FontWeight.Bold else FontWeight.Normal
+                                fontWeight = if (selectedStationIndex == index) FontWeight.Bold else FontWeight.Normal
                             ) 
                         }
                     )
@@ -67,7 +75,7 @@ fun KdsScreen(
             }
 
             // Tablero Kanban de Tickets
-            if (uiState.activeTickets.isEmpty()) {
+            if (uiState.orderCards.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.CheckCircleOutline, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
@@ -82,12 +90,8 @@ fun KdsScreen(
                     contentPadding = PaddingValues(16.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    items(uiState.activeTickets, key = { it.id }) { ticket ->
-                        TicketCard(
-                            ticket = ticket,
-                            onItemToggle = { itemId -> viewModel.toggleItemCompletion(ticket.id, itemId) },
-                            onComplete = { viewModel.completeTicket(ticket.id) }
-                        )
+                    items(uiState.orderCards, key = { it.orderDetails.order.id }) { order ->
+                        KdsTicketCard(order = order)
                     }
                 }
             }
@@ -96,149 +100,151 @@ fun KdsScreen(
 }
 
 @Composable
-fun TicketCard(
-    ticket: KdsTicket,
-    onItemToggle: (java.util.UUID) -> Unit,
-    onComplete: () -> Unit
-) {
-    // Definir colores basados en urgencia
-    val headerColor = when (ticket.urgency) {
-        TicketUrgency.NORMAL -> Color(0xFF388E3C) // Verde
-        TicketUrgency.WARNING -> Color(0xFFFBC02D) // Amarillo
-        TicketUrgency.CRITICAL -> Color(0xFFD32F2F) // Rojo
-    }
-    
-    val headerContentColor = when (ticket.urgency) {
-        TicketUrgency.WARNING -> Color.Black
-        else -> Color.White
+fun KdsTicketCard(order: KdsOrderCardUiModel) {
+    // Determinar el color superior (Header) segun la prioridad (SLA)
+    val headerColor = when (order.slaStatus) {
+        KdsSlaStatus.VERY_DELAYED -> Color(0xFFD32F2F) // Rojo
+        KdsSlaStatus.DELAYED -> Color(0xFFF57C00) // Naranja/Amarillo oscuro
+        KdsSlaStatus.ON_TIME -> Color(0xFF1976D2) // Azul
     }
 
     Card(
         modifier = Modifier
             .width(320.dp)
             .fillMaxHeight(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f))
     ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Cabecera del Ticket
-            Column(
+        Column {
+            // Header del Ticket
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(headerColor)
-                    .padding(16.dp)
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                Column {
                     Text(
-                        text = ticket.orderNumber,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = headerContentColor
+                        text = "Orden #${order.orderDetails.order.id.toString().take(4)}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
                     )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Timer, contentDescription = null, tint = headerContentColor, modifier = Modifier.size(20.dp))
+                    Text(
+                        text = "Para Llevar", // Mock for now
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+                
+                Surface(
+                    color = Color.Black.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Default.Timer, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "${ticket.elapsedMinutes} min",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = headerContentColor
+                            text = "${order.minutesElapsed} min",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(ticket.tableName, color = headerContentColor, style = MaterialTheme.typography.bodyMedium)
-                    Text(ticket.waiterName, color = headerContentColor, style = MaterialTheme.typography.bodyMedium)
-                }
             }
 
-            // Lista de Platillos (Checklist)
+            // Cuerpo del Ticket (Items)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .padding(16.dp)
                     .weight(1f)
-                    .padding(8.dp)
             ) {
-                ticket.items.forEach { item ->
+                order.orderDetails.items.forEach { item ->
+                    val isCompleted = false
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { onItemToggle(item.id) }
-                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                            .padding(vertical = 8.dp)
+                            .clickable { /* Toggle completion status */ },
                         verticalAlignment = Alignment.Top
                     ) {
-                        Checkbox(
-                            checked = item.isCompleted,
-                            onCheckedChange = { onItemToggle(item.id) },
-                            modifier = Modifier.size(24.dp)
-                        )
+                        // Checkbox custom
+                        Box(
+                            modifier = Modifier
+                                .padding(top = 2.dp)
+                                .size(24.dp)
+                                .background(
+                                    color = if (isCompleted) Color(0xFF4CAF50) else Color.Transparent,
+                                    shape = RoundedCornerShape(4.dp)
+                                )
+                                .background(
+                                    color = if (isCompleted) Color.Transparent else MaterialTheme.colorScheme.surfaceVariant,
+                                    shape = RoundedCornerShape(4.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isCompleted) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                        
                         Spacer(modifier = Modifier.width(12.dp))
+                        
                         Column {
-                            Row {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = "${item.quantity}x",
+                                    text = "${item.item.quantity}x",
                                     fontWeight = FontWeight.Bold,
                                     style = MaterialTheme.typography.titleMedium,
-                                    textDecoration = if (item.isCompleted) TextDecoration.LineThrough else null,
-                                    color = if (item.isCompleted) Color.Gray else MaterialTheme.colorScheme.onSurface
+                                    color = if (isCompleted) Color.Gray else MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = item.name,
+                                    text = item.item.productName,
                                     style = MaterialTheme.typography.titleMedium,
-                                    textDecoration = if (item.isCompleted) TextDecoration.LineThrough else null,
-                                    color = if (item.isCompleted) Color.Gray else MaterialTheme.colorScheme.onSurface
+                                    textDecoration = if (isCompleted) TextDecoration.LineThrough else TextDecoration.None,
+                                    color = if (isCompleted) Color.Gray else MaterialTheme.colorScheme.onSurface
                                 )
                             }
-                            if (item.modifiers.isNotEmpty()) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                item.modifiers.forEach { mod ->
+                            
+                            if (!item.item.itemNotes.isNullOrEmpty()) {
+                                Row(modifier = Modifier.padding(top = 4.dp)) {
+                                    Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFF57C00), modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "- $mod",
+                                        text = item.item.itemNotes,
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = if (item.isCompleted) Color.Gray else Color.Red.copy(alpha = 0.8f),
                                         fontStyle = FontStyle.Italic,
-                                        textDecoration = if (item.isCompleted) TextDecoration.LineThrough else null,
+                                        color = Color(0xFFF57C00)
                                     )
                                 }
                             }
                         }
                     }
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
                 }
             }
 
-            // Footer / Acciones
-            Box(
+            // Acciones del Ticket
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                     .padding(16.dp)
             ) {
-                val allCompleted = ticket.items.all { it.isCompleted }
                 Button(
-                    onClick = onComplete,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (allCompleted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-                    )
+                    onClick = { /* Despachar */ },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    Icon(Icons.Default.DoneAll, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        if (allCompleted) "ORDEN LISTA (Despachar)" else "Forzar Despacho",
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                    Text("Marcar Listo", fontWeight = FontWeight.Bold)
                 }
             }
         }

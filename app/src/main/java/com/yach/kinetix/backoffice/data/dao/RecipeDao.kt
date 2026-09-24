@@ -11,6 +11,9 @@ import java.util.UUID
 @Dao
 interface RecipeDao {
 
+    @Query("SELECT * FROM recipe_items")
+    fun getAllRecipes(): Flow<List<RecipeItemEntity>>
+
     @Query("SELECT * FROM recipe_items WHERE productId = :productId")
     fun getRecipeForProduct(productId: UUID): Flow<List<RecipeItemEntity>>
 
@@ -25,4 +28,7 @@ interface RecipeDao {
 
     @Query("DELETE FROM recipe_items WHERE productId = :productId")
     suspend fun deleteRecipeForProduct(productId: UUID)
+
+    @Query("DELETE FROM recipe_items WHERE id = :recipeItemId")
+    suspend fun deleteRecipeItem(recipeItemId: UUID)
 }

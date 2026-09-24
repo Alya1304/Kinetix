@@ -2,6 +2,9 @@ package com.yach.kinetix.core.database
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.RoomDatabase
+import androidx.sqlite.db.SupportSQLiteDatabase
+import com.yach.kinetix.core.security.SecurityManager
 import com.yach.kinetix.backoffice.data.dao.AuditLogDao
 import com.yach.kinetix.backoffice.data.dao.CategoryDao
 import com.yach.kinetix.backoffice.data.dao.IngredientDao
@@ -40,7 +43,8 @@ object DatabaseModule {
     @Singleton
     fun provideAppDatabase(
         @ApplicationContext context: Context,
-        passphraseProvider: DatabasePassphraseProvider
+        passphraseProvider: DatabasePassphraseProvider,
+        securityManager: SecurityManager
     ): AppDatabase {
         val passphrase = passphraseProvider.getPassphrase()
         val factory = SupportFactory(passphrase)
@@ -52,6 +56,18 @@ object DatabaseModule {
         )
             .openHelperFactory(factory)
             .fallbackToDestructiveMigration()
+            .addCallback(object : RoomDatabase.Callback() {
+                override fun onCreate(db: SupportSQLiteDatabase) {
+                    super.onCreate(db)
+                    val id = java.util.UUID.randomUUID().toString()
+                    val pinHash = securityManager.hashPin("1234")
+                    val now = System.currentTimeMillis()
+                    db.execSQL(
+                        "INSERT INTO users (id, username, fullName, role, pinHash, isActive, createdAt, updatedAt) " +
+                        "VALUES ('${id}', 'admin', 'Administrador Sistema', 'ADMIN', '${pinHash}', 1, ${now}, ${now})"
+                    )
+                }
+            })
             .build()
     }
 

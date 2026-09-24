@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.math.BigDecimal
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -43,7 +44,7 @@ fun TreasuryScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     CircularProgressIndicator()
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("Conectando con la impresora térmica...")
+                    Text("Conectando...")
                 }
             },
             confirmButton = {
@@ -122,6 +123,11 @@ fun DashboardView(uiState: TreasuryUiState, onPrint: () -> Unit) {
 
     val scrollState = rememberScrollState()
     
+    val totalMethods = uiState.totalCashSales + uiState.totalCardSales + uiState.totalTransferSales
+    val cashPct = if (totalMethods > BigDecimal.ZERO) uiState.totalCashSales.toFloat() / totalMethods.toFloat() else 0f
+    val cardPct = if (totalMethods > BigDecimal.ZERO) uiState.totalCardSales.toFloat() / totalMethods.toFloat() else 0f
+    val transferPct = if (totalMethods > BigDecimal.ZERO) uiState.totalTransferSales.toFloat() / totalMethods.toFloat() else 0f
+    
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -130,13 +136,13 @@ fun DashboardView(uiState: TreasuryUiState, onPrint: () -> Unit) {
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            KpiCard(title = "Ventas Brutas", value = "$18,450.00", modifier = Modifier.weight(1f))
-            KpiCard(title = "Descuentos", value = "- $450.00", color = Color.Red, modifier = Modifier.weight(1f))
+            KpiCard(title = "Ventas Brutas", value = "$${uiState.grossSales}", modifier = Modifier.weight(1f))
+            KpiCard(title = "Descuentos", value = "- $${uiState.discounts}", color = Color.Red, modifier = Modifier.weight(1f))
         }
         
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            KpiCard(title = "Propinas", value = "$1,800.00", modifier = Modifier.weight(1f))
-            KpiCard(title = "Ventas Netas", value = "$18,000.00", color = Color(0xFF388E3C), modifier = Modifier.weight(1f))
+            KpiCard(title = "Propinas", value = "$${uiState.tips}", modifier = Modifier.weight(1f))
+            KpiCard(title = "Ventas Netas", value = "$${uiState.netSales}", color = Color(0xFF388E3C), modifier = Modifier.weight(1f))
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -147,9 +153,9 @@ fun DashboardView(uiState: TreasuryUiState, onPrint: () -> Unit) {
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                PaymentRow(label = "Efectivo", amount = "$5,000.00", percentage = 0.27f, color = Color(0xFF4CAF50))
-                PaymentRow(label = "Tarjeta", amount = "$11,000.00", percentage = 0.61f, color = Color(0xFF2196F3))
-                PaymentRow(label = "Transferencia", amount = "$2,000.00", percentage = 0.12f, color = Color(0xFFFF9800))
+                PaymentRow(label = "Efectivo", amount = "$${uiState.totalCashSales}", percentage = cashPct, color = Color(0xFF4CAF50))
+                PaymentRow(label = "Tarjeta", amount = "$${uiState.totalCardSales}", percentage = cardPct, color = Color(0xFF2196F3))
+                PaymentRow(label = "Transferencia", amount = "$${uiState.totalTransferSales}", percentage = transferPct, color = Color(0xFFFF9800))
             }
         }
 
@@ -218,13 +224,14 @@ fun BlindCloseView(uiState: TreasuryUiState, viewModel: TreasuryViewModel) {
 
         if (uiState.currentUserRole == UserRole.ADMIN) {
             // Modo Transparente: El gerente ve el esperado
+            val expectedCash = uiState.activeShift?.expectedCash ?: BigDecimal.ZERO
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
             ) {
                 Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Total Esperado en Sistema (Efectivo)", color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Text("$5,000.00", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text("$$expectedCash", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
@@ -278,8 +285,9 @@ fun BlindCloseView(uiState: TreasuryUiState, viewModel: TreasuryViewModel) {
         
         Button(
             onClick = {
-                // Simulación de envío a DB y luego imprimir
-                viewModel.printReport()
+                val cash = uiState.declaredCashInput.toBigDecimalOrNull() ?: BigDecimal.ZERO
+                val cards = uiState.declaredCardInput.toBigDecimalOrNull() ?: BigDecimal.ZERO
+                viewModel.performBlindClose(cash, cards)
             },
             modifier = Modifier.fillMaxWidth().height(56.dp),
             enabled = canClose,

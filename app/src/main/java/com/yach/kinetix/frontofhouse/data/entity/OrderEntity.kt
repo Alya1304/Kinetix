@@ -30,7 +30,8 @@ enum class PaymentMethod {
     CARD,
     MIXED,
     DELIVERY_PLATFORM,
-    CUSTOMER_CREDIT // Pago a cuenta corriente (Fiar)
+    CUSTOMER_CREDIT, // Pago a cuenta corriente (Fiar)
+    TRANSFER
 }
 
 @Entity(

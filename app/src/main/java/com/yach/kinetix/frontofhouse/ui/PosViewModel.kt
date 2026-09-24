@@ -13,6 +13,7 @@ import com.yach.kinetix.frontofhouse.data.entity.PaymentMethod
 import com.yach.kinetix.frontofhouse.domain.CreateOrderUseCase
 import com.yach.kinetix.frontofhouse.domain.OrderItemParam
 import com.yach.kinetix.frontofhouse.domain.ProcessSaleUseCase
+import com.yach.kinetix.core.security.SessionManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -55,7 +56,8 @@ class PosViewModel @Inject constructor(
     private val productDao: ProductDao,
     private val createOrderUseCase: CreateOrderUseCase,
     private val processSaleUseCase: ProcessSaleUseCase,
-    private val printerService: PrinterService
+    private val printerService: PrinterService,
+    private val sessionManager: SessionManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PosUiState())
@@ -146,9 +148,9 @@ class PosViewModel @Inject constructor(
 
     fun checkoutDirectSale(
         paymentMethod: PaymentMethod,
-        tipAmount: BigDecimal,
-        cashierUserId: UUID
+        tipAmount: BigDecimal
     ) {
+        val cashierUserId = sessionManager.currentUser.value?.id ?: UUID.randomUUID()
         val currentState = _uiState.value
         if (currentState.cartItems.isEmpty()) {
             _uiState.update { it.copy(userMessage = "El carrito se encuentra vacío") }

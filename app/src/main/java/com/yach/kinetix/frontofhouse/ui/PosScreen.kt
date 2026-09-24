@@ -58,17 +58,35 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 @Composable
 fun PosScreen(viewModel: PosViewModel = hiltViewModel()) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val sessionManager = androidx.compose.ui.platform.LocalContext.current.let {
+        // Accessing SessionManager could be done via ViewModel or EntryPoint.
+        // Actually, we can inject SessionManager into PosViewModel and use it there.
+        // I will just use the active user from PosViewModel.
+    }
+    
+    var showCheckoutModal by remember { mutableStateOf(false) }
+
     PosScreenContent(
         uiState = uiState,
         onCategorySelect = viewModel::selectCategory,
         onProductSelect = { viewModel.addToCart(it) },
         onRemoveItem = viewModel::removeFromCart,
         onClearCart = viewModel::clearCart,
-        onCheckout = {
-            viewModel.checkoutDirectSale(PaymentMethod.CASH, BigDecimal.ZERO, UUID.randomUUID())
-        }
+        onCheckout = { showCheckoutModal = true }
     )
+
+    if (showCheckoutModal) {
+        CheckoutBottomSheet(
+            totalAmount = uiState.totalAmount,
+            onDismiss = { showCheckoutModal = false },
+            onConfirmCheckout = { method, tip ->
+                viewModel.checkoutDirectSale(method, tip)
+                showCheckoutModal = false
+            }
+        )
+    }
 }
+
 
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -452,7 +470,9 @@ fun OrderTicket(
 
 
 // Previsualizaciones para Android Studio
-@Preview(widthDp = 1280, heightDp = 800, showBackground = true, name = "Tablet Landscape Dark")
+@Preview(widthDp = 1280, heightDp = 800, showBackground = true, name = "Tablet Landscape Dark",
+    showSystemUi = false
+)
 @Composable
 fun PosScreenPreviewDark() {
     KinetixTheme(darkTheme = true) {

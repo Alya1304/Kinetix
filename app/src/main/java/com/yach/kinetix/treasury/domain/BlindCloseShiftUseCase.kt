@@ -75,6 +75,9 @@ class BlindCloseShiftUseCase @Inject constructor(
                     PaymentMethod.DELIVERY_PLATFORM -> {
                         // Pagos recibidos por plataforma externa
                     }
+                    PaymentMethod.TRANSFER -> {
+                        // Transferencia, no cuenta como efectivo en caja
+                    }
                     null -> {}
                 }
             }

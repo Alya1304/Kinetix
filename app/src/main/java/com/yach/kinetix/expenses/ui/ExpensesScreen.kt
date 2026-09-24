@@ -1,4 +1,4 @@
-package com.yach.kinetix.expenses.ui
+﻿package com.yach.kinetix.expenses.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,6 +23,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.yach.kinetix.treasury.ui.ExpensesViewModel
+import com.yach.kinetix.treasury.data.entity.ExpenseEntity
+import com.yach.kinetix.treasury.data.entity.SupplierEntity
+import java.math.BigDecimal
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,6 +36,9 @@ fun ExpensesScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showAddExpenseDialog by remember { mutableStateOf(false) }
+    var selectedTabIndex by remember { mutableIntStateOf(0) }
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedCategory by remember { mutableStateOf("Todos") }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -41,7 +48,7 @@ fun ExpensesScreen(
             )
         },
         floatingActionButton = {
-            if (uiState.selectedTabIndex == 0) {
+            if (selectedTabIndex == 0) {
                 ExtendedFloatingActionButton(
                     onClick = { showAddExpenseDialog = true },
                     icon = { Icon(Icons.Default.Add, "Registrar Gasto") },
@@ -59,8 +66,8 @@ fun ExpensesScreen(
                 .background(MaterialTheme.colorScheme.background)
         ) {
             // Widget de Resumen Financiero
-            if (uiState.selectedTabIndex == 0) {
-                val totalSpent = uiState.expenses.sumOf { it.amount }
+            if (selectedTabIndex == 0) {
+                val totalSpent = uiState.expenses.map { it.amount }.fold(BigDecimal.ZERO) { acc, e -> acc + e }
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -82,7 +89,7 @@ fun ExpensesScreen(
                     }
                 }
             } else {
-                val totalDebt = uiState.suppliers.sumOf { it.pendingBalance }
+                val totalDebt = uiState.suppliers.map { it.currentDebt }.fold(BigDecimal.ZERO) { acc, e -> acc + e }
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -105,47 +112,96 @@ fun ExpensesScreen(
                 }
             }
 
-            // Tabs
+            // Pestañas
             TabRow(
-                selectedTabIndex = uiState.selectedTabIndex,
+                selectedTabIndex = selectedTabIndex,
                 containerColor = MaterialTheme.colorScheme.surface
             ) {
-                uiState.tabs.forEachIndexed { index, title ->
-                    Tab(
-                        selected = uiState.selectedTabIndex == index,
-                        onClick = { viewModel.selectTab(index) },
-                        text = { Text(title, fontWeight = if (uiState.selectedTabIndex == index) FontWeight.Bold else FontWeight.Normal) }
-                    )
+                Tab(
+                    selected = selectedTabIndex == 0,
+                    onClick = { selectedTabIndex = 0 },
+                    text = { Text("Gastos Operativos", fontWeight = if (selectedTabIndex == 0) FontWeight.Bold else FontWeight.Normal) }
+                )
+                Tab(
+                    selected = selectedTabIndex == 1,
+                    onClick = { selectedTabIndex = 1 },
+                    text = { Text("Proveedores (Cuentas por Pagar)", fontWeight = if (selectedTabIndex == 1) FontWeight.Bold else FontWeight.Normal) }
+                )
+            }
+
+            // Buscador y Filtros
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text(if (selectedTabIndex == 0) "Buscar gasto..." else "Buscar proveedor...") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                if (selectedTabIndex == 0) {
+                    Spacer(modifier = Modifier.width(16.dp))
+                    var expanded by remember { mutableStateOf(false) }
+                    val categories = listOf("Todos", "Insumos", "Servicios", "Nómina", "Mantenimiento", "Otros")
+                    Box {
+                        OutlinedButton(onClick = { expanded = true }) {
+                            Text(selectedCategory)
+                            Icon(Icons.Default.ArrowDropDown, contentDescription = null)
+                        }
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            categories.forEach { category ->
+                                DropdownMenuItem(
+                                    text = { Text(category) },
+                                    onClick = { 
+                                        selectedCategory = category
+                                        expanded = false 
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
             // Contenido
-            if (uiState.selectedTabIndex == 0) {
+            if (selectedTabIndex == 0) {
                 // Lista de Gastos
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(uiState.expenses, key = { it.id }) { expense ->
-                        ExpenseItem(expense)
+                if (uiState.expenses.isEmpty()) {
+                    EmptyStateView(icon = Icons.Default.Receipt, message = "No hay gastos registrados hoy")
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(uiState.expenses, key = { it.id }) { expense ->
+                            ExpenseItemRow(expense = expense)
+                        }
                     }
-                    item { Spacer(modifier = Modifier.height(80.dp)) } // Para el FAB
                 }
             } else {
-                // Cuadrícula de Proveedores
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 300.dp),
-                    contentPadding = PaddingValues(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(uiState.suppliers, key = { it.id }) { supplier ->
-                        SupplierCard(
-                            supplier = supplier,
-                            onClick = { viewModel.selectSupplier(supplier.id) }
-                        )
+                // Lista de Proveedores
+                if (uiState.suppliers.isEmpty()) {
+                    EmptyStateView(icon = Icons.Default.LocalShipping, message = "No hay proveedores registrados")
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 340.dp),
+                        contentPadding = PaddingValues(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        items(uiState.suppliers, key = { it.id }) { supplier ->
+                            SupplierCard(supplier = supplier)
+                        }
                     }
                 }
             }
@@ -153,66 +209,12 @@ fun ExpensesScreen(
     }
 
     if (showAddExpenseDialog) {
-        var concept by remember { mutableStateOf("") }
-        var amount by remember { mutableStateOf("") }
-        
-        AlertDialog(
-            onDismissRequest = { showAddExpenseDialog = false },
-            title = { Text("Registrar Gasto Rápido") },
-            text = {
-                Column {
-                    OutlinedTextField(
-                        value = concept,
-                        onValueChange = { concept = it },
-                        label = { Text("Concepto (ej. Propinas, Hielo)") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = amount,
-                        onValueChange = { amount = it },
-                        label = { Text("Monto ($)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val num = amount.toDoubleOrNull() ?: 0.0
-                        if (concept.isNotBlank() && num > 0) {
-                            viewModel.addExpense(concept, num)
-                            showAddExpenseDialog = false
-                        }
-                    },
-                    enabled = concept.isNotBlank() && amount.isNotBlank()
-                ) { Text("Registrar") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAddExpenseDialog = false }) { Text("Cancelar") }
-            }
-        )
-    }
-
-    // Modal de Proveedor (Estado de cuenta)
-    if (uiState.selectedSupplierId != null) {
-        val supplier = uiState.suppliers.find { it.id == uiState.selectedSupplierId }
-        if (supplier != null) {
-            SupplierBottomSheet(
-                supplier = supplier,
-                onDismiss = { viewModel.selectSupplier(null) }
-            )
-        } else {
-            viewModel.selectSupplier(null)
-        }
+        AddExpenseDialog(onDismiss = { showAddExpenseDialog = false })
     }
 }
 
 @Composable
-fun ExpenseItem(expense: Expense) {
+fun ExpenseItemRow(expense: ExpenseEntity) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -222,29 +224,36 @@ fun ExpenseItem(expense: Expense) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.ReceiptLong, contentDescription = null, tint = MaterialTheme.colorScheme.onErrorContainer)
-                }
-                Spacer(modifier = Modifier.width(16.dp))
-                Column {
-                    Text(expense.concept, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(expense.time, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.errorContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Receipt,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(expense.notes ?: "Gasto sin descripción", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(expense.amount.toString(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("•", color = Color.Gray)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Pago vía Caja", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 }
             }
-            
             Text(
                 text = "- $${"%.2f".format(expense.amount)}",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFFD32F2F)
             )
@@ -253,12 +262,9 @@ fun ExpenseItem(expense: Expense) {
 }
 
 @Composable
-fun SupplierCard(supplier: Supplier, onClick: () -> Unit) {
-    val hasDebt = supplier.pendingBalance > 0
+fun SupplierCard(supplier: SupplierEntity) {
     ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() },
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -267,98 +273,99 @@ fun SupplierCard(supplier: Supplier, onClick: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.LocalShipping, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(supplier.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(supplier.category, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                 }
-                Box(
-                    modifier = Modifier
-                        .background(
-                            if (hasDebt) Color.Red.copy(alpha = 0.1f) else Color.Green.copy(alpha = 0.1f),
-                            RoundedCornerShape(8.dp)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
+                
+                if (supplier.currentDebt > BigDecimal.ZERO) {
+                    Badge(containerColor = MaterialTheme.colorScheme.errorContainer) {
+                        Text("Con Deuda", color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.padding(horizontal = 4.dp))
+                    }
+                } else {
+                    Badge(containerColor = Color(0xFF4CAF50).copy(alpha = 0.2f)) {
+                        Text("Al Día", color = Color(0xFF2E7D32), modifier = Modifier.padding(horizontal = 4.dp))
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Column {
+                    Text("Próximo Pago", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
+                    Text("Mañana", fontWeight = FontWeight.Bold)
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("Deuda Pendiente", style = MaterialTheme.typography.labelMedium, color = Color.Gray)
                     Text(
-                        text = if (hasDebt) "Con Deuda" else "Al Corriente",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (hasDebt) Color.Red else Color(0xFF388E3C),
-                        fontWeight = FontWeight.Bold
+                        text = "$${"%.2f".format(supplier.currentDebt)}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = if (supplier.currentDebt > BigDecimal.ZERO) Color(0xFFD32F2F) else MaterialTheme.colorScheme.onSurface
                     )
                 }
             }
+
             Spacer(modifier = Modifier.height(16.dp))
             HorizontalDivider()
             Spacer(modifier = Modifier.height(8.dp))
+            
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.End
             ) {
-                Text("Saldo Pendiente:", color = Color.Gray)
-                Text(
-                    text = "$${"%.2f".format(supplier.pendingBalance)}",
-                    fontWeight = FontWeight.Bold,
-                    color = if (hasDebt) Color.Red else MaterialTheme.colorScheme.onSurface
-                )
+                TextButton(onClick = { /* Registrar Pago */ }) {
+                    Text("Abonar Pago")
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Button(onClick = { /* Nuevo Pedido */ }) {
+                    Text("Nuevo Pedido")
+                }
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SupplierBottomSheet(supplier: Supplier, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 8.dp)
-        ) {
-            Text(supplier.name, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text(supplier.category, style = MaterialTheme.typography.titleMedium, color = Color.Gray)
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            val hasDebt = supplier.pendingBalance > 0
-            
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = if (hasDebt) Color.Red.copy(alpha = 0.05f) else Color.Green.copy(alpha = 0.05f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text("Deuda Pendiente", color = Color.Gray)
-                    Text(
-                        text = "$${"%.2f".format(supplier.pendingBalance)}",
-                        style = MaterialTheme.typography.displaySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (hasDebt) Color.Red else Color(0xFF388E3C)
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            
-            if (hasDebt) {
-                Button(
-                    onClick = { /* Registrar Pago */ },
-                    modifier = Modifier.fillMaxWidth().height(56.dp)
-                ) {
-                    Icon(Icons.Default.Payment, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Registrar Pago", style = MaterialTheme.typography.titleMedium)
-                }
-            } else {
-                OutlinedButton(
-                    onClick = { /* Ver Historial */ },
-                    modifier = Modifier.fillMaxWidth().height(56.dp)
-                ) {
-                    Text("Ver Historial de Facturas", style = MaterialTheme.typography.titleMedium)
-                }
-            }
-            Spacer(modifier = Modifier.height(32.dp))
+fun EmptyStateView(icon: androidx.compose.ui.graphics.vector.ImageVector, message: String) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(message, style = MaterialTheme.typography.titleLarge, color = Color.Gray)
         }
     }
+}
+
+@Composable
+fun AddExpenseDialog(onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Registrar Nuevo Gasto") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                OutlinedTextField(
+                    value = "",
+                    onValueChange = {},
+                    label = { Text("Monto") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = "",
+                    onValueChange = {},
+                    label = { Text("Concepto / Descripción") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss) { Text("Guardar") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
 }

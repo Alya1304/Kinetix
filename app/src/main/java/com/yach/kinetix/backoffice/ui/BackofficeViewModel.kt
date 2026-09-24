@@ -3,11 +3,17 @@ package com.yach.kinetix.backoffice.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.yach.kinetix.backoffice.data.dao.CategoryDao
+import com.yach.kinetix.backoffice.data.dao.IngredientDao
 import com.yach.kinetix.backoffice.data.dao.ProductDao
+import com.yach.kinetix.backoffice.data.dao.RecipeDao
 import com.yach.kinetix.backoffice.data.entity.CategoryEntity
+import com.yach.kinetix.backoffice.data.entity.IngredientEntity
 import com.yach.kinetix.backoffice.data.entity.ProductEntity
+import com.yach.kinetix.backoffice.data.entity.RecipeItemEntity
 import com.yach.kinetix.backoffice.domain.PerformStockAuditUseCase
 import com.yach.kinetix.backoffice.domain.RegisterWastageUseCase
+import com.yach.kinetix.frontofhouse.data.dao.ModifierDao
+import com.yach.kinetix.frontofhouse.data.entity.ModifierEntity
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -21,6 +27,9 @@ import javax.inject.Inject
 data class BackofficeUiState(
     val products: List<ProductEntity> = emptyList(),
     val categories: List<CategoryEntity> = emptyList(),
+    val ingredients: List<IngredientEntity> = emptyList(),
+    val modifiers: List<ModifierEntity> = emptyList(),
+    val recipes: Map<UUID, List<RecipeItemEntity>> = emptyMap(),
     val isLoading: Boolean = false,
     val feedbackMessage: String? = null
 )
@@ -29,6 +38,9 @@ data class BackofficeUiState(
 class BackofficeViewModel @Inject constructor(
     private val productDao: ProductDao,
     private val categoryDao: CategoryDao,
+    private val ingredientDao: IngredientDao,
+    private val recipeDao: RecipeDao,
+    private val modifierDao: ModifierDao,
     private val registerWastageUseCase: RegisterWastageUseCase,
     private val performStockAuditUseCase: PerformStockAuditUseCase
 ) : ViewModel() {
@@ -49,6 +61,22 @@ class BackofficeViewModel @Inject constructor(
         viewModelScope.launch {
             categoryDao.getAllActiveCategories().collect { categories ->
                 _uiState.update { it.copy(categories = categories) }
+            }
+        }
+        viewModelScope.launch {
+            ingredientDao.getAllActiveIngredients().collect { ingredients ->
+                _uiState.update { it.copy(ingredients = ingredients) }
+            }
+        }
+        viewModelScope.launch {
+            modifierDao.getAllActiveModifiers().collect { modifiers ->
+                _uiState.update { it.copy(modifiers = modifiers) }
+            }
+        }
+        viewModelScope.launch {
+            recipeDao.getAllRecipes().collect { allItems ->
+                val grouped = allItems.groupBy { it.productId }
+                _uiState.update { it.copy(recipes = grouped) }
             }
         }
     }
@@ -77,6 +105,29 @@ class BackofficeViewModel @Inject constructor(
             )
             productDao.insertProduct(product)
             _uiState.update { it.copy(feedbackMessage = "Producto ${product.name} guardado correctamente") }
+        }
+    }
+
+    fun saveIngredient(name: String, unitOfMeasure: String, costPerUnit: BigDecimal) {
+        viewModelScope.launch {
+            val ingredient = IngredientEntity(
+                name = name,
+                unitOfMeasure = unitOfMeasure,
+                costPerUnit = costPerUnit
+            )
+            ingredientDao.insertIngredient(ingredient)
+            _uiState.update { it.copy(feedbackMessage = "Insumo ${ingredient.name} guardado") }
+        }
+    }
+
+    fun saveModifier(name: String, extraPrice: BigDecimal) {
+        viewModelScope.launch {
+            val modifier = ModifierEntity(
+                name = name,
+                extraPriceWithTax = extraPrice
+            )
+            modifierDao.insertModifier(modifier)
+            _uiState.update { it.copy(feedbackMessage = "Modificador ${modifier.name} guardado") }
         }
     }
 
@@ -109,6 +160,25 @@ class BackofficeViewModel @Inject constructor(
                 }.onFailure { err ->
                     _uiState.update { it.copy(feedbackMessage = "Error en auditoría: ${err.message}") }
                 }
+        }
+    }
+
+    fun addIngredientToRecipe(productId: UUID, ingredientId: UUID, requiredQuantity: BigDecimal) {
+        viewModelScope.launch {
+            val item = RecipeItemEntity(
+                id = UUID.randomUUID(),
+                productId = productId,
+                ingredientId = ingredientId,
+                requiredQuantity = requiredQuantity
+            )
+            recipeDao.insertRecipeItem(item)
+            _uiState.update { it.copy(feedbackMessage = "Insumo agregado a la receta") }
+        }
+    }
+
+    fun removeIngredientFromRecipe(recipeItemId: UUID) {
+        viewModelScope.launch {
+            recipeDao.deleteRecipeItem(recipeItemId)
         }
     }
 

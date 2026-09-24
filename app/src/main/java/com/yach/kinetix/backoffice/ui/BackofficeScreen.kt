@@ -31,11 +31,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yach.kinetix.backoffice.data.entity.CategoryEntity
+import com.yach.kinetix.backoffice.data.entity.IngredientEntity
 import com.yach.kinetix.backoffice.data.entity.ProductEntity
 import java.math.BigDecimal
 import java.util.UUID
 
-enum class BackofficeTab { CATALOG, INVENTORY }
+enum class BackofficeTab { CATALOG, INVENTORY, INGREDIENTS, MODIFIERS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,7 +51,10 @@ fun BackofficeScreen(
 
     var selectedTab by remember { mutableStateOf(BackofficeTab.CATALOG) }
     var showAddProductSheet by remember { mutableStateOf(false) }
+    var showAddIngredientSheet by remember { mutableStateOf(false) }
+    var showAddModifierSheet by remember { mutableStateOf(false) }
     var selectedProductForAudit by remember { mutableStateOf<ProductEntity?>(null) }
+    var showRecipeSheetForProduct by remember { mutableStateOf<ProductEntity?>(null) }
 
     // Mostrar Snackbar cuando hay un mensaje
     val snackbarHostState = remember { SnackbarHostState() }
@@ -71,16 +75,21 @@ fun BackofficeScreen(
             )
         },
         floatingActionButton = {
-            if (selectedTab == BackofficeTab.CATALOG) {
+            if (selectedTab != BackofficeTab.INVENTORY) {
                 FloatingActionButton(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        showAddProductSheet = true
+                        when (selectedTab) {
+                            BackofficeTab.CATALOG -> showAddProductSheet = true
+                            BackofficeTab.INGREDIENTS -> showAddIngredientSheet = true
+                            BackofficeTab.MODIFIERS -> showAddModifierSheet = true
+                            else -> {}
+                        }
                     },
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "Agregar Producto")
+                    Icon(Icons.Default.Add, contentDescription = "Agregar")
                 }
             }
         }
@@ -92,7 +101,7 @@ fun BackofficeScreen(
                 .background(MaterialTheme.colorScheme.background)
         ) {
             TabRow(
-                selectedTabIndex = if (selectedTab == BackofficeTab.CATALOG) 0 else 1,
+                selectedTabIndex = selectedTab.ordinal,
                 containerColor = MaterialTheme.colorScheme.surface
             ) {
                 Tab(
@@ -101,7 +110,7 @@ fun BackofficeScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         selectedTab = BackofficeTab.CATALOG
                     },
-                    text = { Text("Catálogo de Productos", fontWeight = if (selectedTab == BackofficeTab.CATALOG) FontWeight.Bold else FontWeight.Normal) }
+                    text = { Text("Catálogo", fontWeight = if (selectedTab == BackofficeTab.CATALOG) FontWeight.Bold else FontWeight.Normal) }
                 )
                 Tab(
                     selected = selectedTab == BackofficeTab.INVENTORY,
@@ -109,13 +118,33 @@ fun BackofficeScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         selectedTab = BackofficeTab.INVENTORY
                     },
-                    text = { Text("Gestión de Inventario & Mermas", fontWeight = if (selectedTab == BackofficeTab.INVENTORY) FontWeight.Bold else FontWeight.Normal) }
+                    text = { Text("Inventario", fontWeight = if (selectedTab == BackofficeTab.INVENTORY) FontWeight.Bold else FontWeight.Normal) }
+                )
+                Tab(
+                    selected = selectedTab == BackofficeTab.INGREDIENTS,
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        selectedTab = BackofficeTab.INGREDIENTS
+                    },
+                    text = { Text("Insumos", fontWeight = if (selectedTab == BackofficeTab.INGREDIENTS) FontWeight.Bold else FontWeight.Normal) }
+                )
+                Tab(
+                    selected = selectedTab == BackofficeTab.MODIFIERS,
+                    onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        selectedTab = BackofficeTab.MODIFIERS
+                    },
+                    text = { Text("Modificadores", fontWeight = if (selectedTab == BackofficeTab.MODIFIERS) FontWeight.Bold else FontWeight.Normal) }
                 )
             }
 
             Box(modifier = Modifier.weight(1f).padding(16.dp)) {
                 when (selectedTab) {
-                    BackofficeTab.CATALOG -> CatalogTab(products = uiState.products, categories = uiState.categories)
+                    BackofficeTab.CATALOG -> CatalogTab(
+                        products = uiState.products, 
+                        categories = uiState.categories,
+                        onEditRecipe = { showRecipeSheetForProduct = it }
+                    )
                     BackofficeTab.INVENTORY -> InventoryTab(
                         products = uiState.products, 
                         onProductSelect = { 
@@ -123,6 +152,8 @@ fun BackofficeScreen(
                             selectedProductForAudit = it 
                         }
                     )
+                    BackofficeTab.INGREDIENTS -> IngredientsTab(ingredients = uiState.ingredients)
+                    BackofficeTab.MODIFIERS -> ModifiersTab(modifiers = uiState.modifiers)
                 }
             }
         }
@@ -135,6 +166,26 @@ fun BackofficeScreen(
             onSave = { categoryId, name, sku, barcode, price, tax, initialStock, isKitchen ->
                 viewModel.saveProduct(categoryId, name, sku, barcode, price, tax, initialStock, isKitchen)
                 showAddProductSheet = false
+            }
+        )
+    }
+    
+    if (showAddIngredientSheet) {
+        AddIngredientSheet(
+            onDismiss = { showAddIngredientSheet = false },
+            onSave = { name, unit, cost ->
+                viewModel.saveIngredient(name, unit, cost)
+                showAddIngredientSheet = false
+            }
+        )
+    }
+
+    if (showAddModifierSheet) {
+        AddModifierSheet(
+            onDismiss = { showAddModifierSheet = false },
+            onSave = { name, extraPrice ->
+                viewModel.saveModifier(name, extraPrice)
+                showAddModifierSheet = false
             }
         )
     }
@@ -153,10 +204,31 @@ fun BackofficeScreen(
             }
         )
     }
+
+    if (showRecipeSheetForProduct != null) {
+        val prod = showRecipeSheetForProduct!!
+        val recipeItems = uiState.recipes[prod.id] ?: emptyList()
+        RecipeSheet(
+            product = prod,
+            recipeItems = recipeItems,
+            ingredients = uiState.ingredients,
+            onDismiss = { showRecipeSheetForProduct = null },
+            onAddIngredient = { ingredient, quantity ->
+                viewModel.addIngredientToRecipe(prod.id, ingredient.id, quantity)
+            },
+            onRemoveRecipeItem = { recipeItem ->
+                viewModel.removeIngredientFromRecipe(recipeItem.id)
+            }
+        )
+    }
 }
 
 @Composable
-fun CatalogTab(products: List<ProductEntity>, categories: List<CategoryEntity>) {
+fun CatalogTab(
+    products: List<ProductEntity>, 
+    categories: List<CategoryEntity>,
+    onEditRecipe: (ProductEntity) -> Unit
+) {
     Column(modifier = Modifier.fillMaxSize()) {
         Text(
             text = "Catálogo de Productos",
@@ -173,7 +245,7 @@ fun CatalogTab(products: List<ProductEntity>, categories: List<CategoryEntity>) 
             items(products, key = { it.id }) { product ->
                 val categoryName = categories.find { it.id == product.categoryId }?.name ?: "Sin categoría"
                 Card(
-                    modifier = Modifier.height(130.dp),
+                    modifier = Modifier.height(160.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -191,6 +263,12 @@ fun CatalogTab(products: List<ProductEntity>, categories: List<CategoryEntity>) 
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Text(text = "$${product.finalPriceWithTax}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                             Text(text = "SKU: ${product.sku}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        }
+                        TextButton(
+                            onClick = { onEditRecipe(product) },
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text("Receta")
                         }
                     }
                 }
@@ -404,6 +482,197 @@ fun AdjustStockSheet(
                 enabled = inputQuantity.isNotBlank()
             ) {
                 Text(if (mode == "AUDIT") "GUARDAR AJUSTE" else "CONFIRMAR MERMA", style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+fun IngredientsTab(ingredients: List<IngredientEntity>) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text(
+            text = "Insumos (Materia Prima)",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(ingredients, key = { it.id }) { ingredient ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(text = ingredient.name, style = MaterialTheme.typography.titleMedium)
+                            Text(text = "Costo unitario: $${ingredient.costPerUnit}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        }
+                        Box(
+                            modifier = Modifier
+                                .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(
+                                text = "${ingredient.stockQuantity} ${ingredient.unitOfMeasure}",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ModifiersTab(modifiers: List<com.yach.kinetix.frontofhouse.data.entity.ModifierEntity>) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text(
+            text = "Modificadores de Platillo",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(modifiers, key = { it.id }) { modifier ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(text = modifier.name, style = MaterialTheme.typography.titleMedium)
+                            if (modifier.extraPriceWithTax > BigDecimal.ZERO) {
+                                Text(text = "Costo extra: $${modifier.extraPriceWithTax}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                            } else {
+                                Text(text = "Sin costo extra", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddIngredientSheet(
+    onDismiss: () -> Unit,
+    onSave: (String, String, BigDecimal) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var unit by remember { mutableStateOf("kg") }
+    var cost by remember { mutableStateOf("") }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp)
+        ) {
+            Text("Agregar Insumo", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Nombre (Ej. Harina, Queso)") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = unit,
+                onValueChange = { unit = it },
+                label = { Text("Unidad de Medida (Ej. kg, lt)") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = cost,
+                onValueChange = { cost = it },
+                label = { Text("Costo por Unidad") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(
+                onClick = {
+                    val c = cost.toBigDecimalOrNull() ?: BigDecimal.ZERO
+                    onSave(name, unit, c)
+                },
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                enabled = name.isNotBlank() && unit.isNotBlank()
+            ) {
+                Text("GUARDAR INSUMO")
+            }
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AddModifierSheet(
+    onDismiss: () -> Unit,
+    onSave: (String, BigDecimal) -> Unit
+) {
+    var name by remember { mutableStateOf("") }
+    var extraPrice by remember { mutableStateOf("") }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp)
+        ) {
+            Text("Agregar Modificador", style = MaterialTheme.typography.headlineSmall)
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Nombre (Ej. Sin Cebolla, Extra Queso)") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = extraPrice,
+                onValueChange = { extraPrice = it },
+                label = { Text("Precio Extra (opcional)") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Button(
+                onClick = {
+                    val p = extraPrice.toBigDecimalOrNull() ?: BigDecimal.ZERO
+                    onSave(name, p)
+                },
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                enabled = name.isNotBlank()
+            ) {
+                Text("GUARDAR MODIFICADOR")
             }
             Spacer(modifier = Modifier.height(24.dp))
         }

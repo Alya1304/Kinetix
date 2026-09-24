@@ -11,8 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,11 +19,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.yach.kinetix.frontofhouse.ui.CustomersViewModel
+import com.yach.kinetix.frontofhouse.data.entity.CustomerEntity
+import java.math.BigDecimal
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CrmScreen(
-    viewModel: CrmViewModel,
+    viewModel: CustomersViewModel,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -48,37 +50,44 @@ fun CrmScreen(
         ) {
             // Buscador
             SearchBar(
-                query = uiState.searchQuery,
-                onQueryChange = viewModel::onSearchQueryChange,
-                onSearch = { viewModel.onSearchActiveChange(false) },
-                active = uiState.isSearchActive,
-                onActiveChange = viewModel::onSearchActiveChange,
-                placeholder = { Text("Buscar por nombre o teléfono...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (uiState.searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.onSearchQueryChange("") }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Limpiar")
+                inputField = {
+                    SearchBarDefaults.InputField(
+                        query = uiState.searchQuery,
+                        onQueryChange = { },
+                        onSearch = { },
+                        expanded = false,
+                        onExpandedChange = { },
+                        placeholder = { Text("Buscar por nombre o teléfono...") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        trailingIcon = {
+                            if (uiState.searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { }) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Limpiar")
+                                }
+                            }
                         }
-                    }
+                    )
                 },
+                expanded = false,
+                onExpandedChange = { },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                // Resultados de búsqueda activos podrían ir aquí si quisieramos pantalla completa
-            }
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                content = { }
+            )
 
             // Pestañas de Filtro
+            val filters = listOf("Todos", "VIP", "Deudores", "Recientes")
+            var selectedFilterIndex by remember { mutableIntStateOf(0) }
             TabRow(
-                selectedTabIndex = uiState.selectedFilterIndex,
+                selectedTabIndex = selectedFilterIndex,
                 containerColor = MaterialTheme.colorScheme.surface
             ) {
-                uiState.filters.forEachIndexed { index, title ->
+                filters.forEachIndexed { index, title ->
                     Tab(
-                        selected = uiState.selectedFilterIndex == index,
-                        onClick = { viewModel.selectFilter(index) },
-                        text = { Text(title, fontWeight = if (uiState.selectedFilterIndex == index) FontWeight.Bold else FontWeight.Normal) }
+                        selected = selectedFilterIndex == index,
+                        onClick = { selectedFilterIndex = index },
+                        text = { Text(title, fontWeight = if (selectedFilterIndex == index) FontWeight.Bold else FontWeight.Normal) }
                     )
                 }
             }
@@ -98,12 +107,12 @@ fun CrmScreen(
                     contentPadding = PaddingValues(16.dp),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.weight(1f)
                 ) {
                     items(uiState.customers, key = { it.id }) { customer ->
                         CustomerCard(
                             customer = customer,
-                            onClick = { viewModel.selectCustomer(customer.id) }
+                            onClick = { viewModel.selectCustomer(customer) }
                         )
                     }
                 }
@@ -112,8 +121,8 @@ fun CrmScreen(
     }
 
     // Modal Profile
-    if (uiState.selectedCustomerId != null) {
-        val customer = uiState.customers.find { it.id == uiState.selectedCustomerId }
+    if (uiState.selectedCustomer != null) {
+        val customer = uiState.selectedCustomer
         if (customer != null) {
             CustomerProfileSheet(
                 customer = customer,
@@ -126,7 +135,7 @@ fun CrmScreen(
 }
 
 @Composable
-fun CustomerCard(customer: Customer, onClick: () -> Unit) {
+fun CustomerCard(customer: CustomerEntity, onClick: () -> Unit) {
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -148,7 +157,7 @@ fun CustomerCard(customer: Customer, onClick: () -> Unit) {
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = customer.name.take(1).uppercase(),
+                    text = customer.fullName.take(1).uppercase(),
                     style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                     fontWeight = FontWeight.Bold
@@ -159,7 +168,7 @@ fun CustomerCard(customer: Customer, onClick: () -> Unit) {
             // Info
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = customer.name,
+                    text = customer.fullName,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -167,19 +176,18 @@ fun CustomerCard(customer: Customer, onClick: () -> Unit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Phone, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.Gray)
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(customer.phone, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                    Text(customer.phone ?: "Sin teléfono", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
                 }
             }
 
-            // Etiqueta VIP
-            if (customer.category == CustomerCategory.VIP) {
+            if (customer.creditLimit > BigDecimal.ZERO) {
                 Icon(
                     Icons.Default.Star,
                     contentDescription = "VIP",
                     tint = Color(0xFFFFD700),
                     modifier = Modifier.size(24.dp)
                 )
-            } else if (customer.category == CustomerCategory.DEBTOR) {
+            } else if (customer.currentDebt > BigDecimal.ZERO) {
                 Icon(
                     Icons.Default.Warning,
                     contentDescription = "Deudor",
@@ -194,7 +202,7 @@ fun CustomerCard(customer: Customer, onClick: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomerProfileSheet(
-    customer: Customer,
+    customer: CustomerEntity,
     onDismiss: () -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -218,7 +226,7 @@ fun CustomerProfileSheet(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = customer.name.take(1).uppercase(),
+                            text = customer.fullName.take(1).uppercase(),
                             style = MaterialTheme.typography.headlineMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer,
                             fontWeight = FontWeight.Bold
@@ -227,12 +235,12 @@ fun CustomerProfileSheet(
                     Spacer(modifier = Modifier.width(16.dp))
                     Column {
                         Text(
-                            text = customer.name,
+                            text = customer.fullName,
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold
                         )
-                        if (customer.category == CustomerCategory.VIP) {
-                            Text("⭐ Cliente VIP", color = Color(0xFFD4AF37), fontWeight = FontWeight.Bold)
+                        if (customer.creditLimit > BigDecimal.ZERO) {
+                            Text("★ Cliente VIP", color = Color(0xFFD4AF37), fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -255,9 +263,9 @@ fun CustomerProfileSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                StatBox(label = "Visitas", value = "${customer.totalVisits}")
-                StatBox(label = "Ticket Prom.", value = "$${customer.averageTicket}")
-                StatBox(label = "Puntos", value = "${customer.loyaltyPoints}", color = MaterialTheme.colorScheme.primary)
+                StatBox(label = "Visitas", value = "12")
+                StatBox(label = "Ticket Prom.", value = "$450.00")
+                StatBox(label = "Puntos", value = "120", color = MaterialTheme.colorScheme.primary)
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -272,7 +280,7 @@ fun CustomerProfileSheet(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(customer.lastVisit, fontWeight = FontWeight.Bold)
+                        Text("Hace 3 días", fontWeight = FontWeight.Bold)
                         Text("$1,200.00", fontWeight = FontWeight.Bold)
                     }
                     Text("Mesa 4 • Atendido por Carlos R.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)

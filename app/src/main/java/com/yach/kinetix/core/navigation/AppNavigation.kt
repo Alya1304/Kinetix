@@ -9,13 +9,17 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.RoomService
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TableRestaurant
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -57,6 +61,8 @@ import com.yach.kinetix.treasury.ui.TreasuryScreen
 import com.yach.kinetix.treasury.ui.TreasuryViewModel
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
+    data object Login : Screen("login", "Login", Icons.Default.Person)
+    data object Dashboard : Screen("dashboard", "Dashboard", Icons.Default.Dashboard)
     data object Pos : Screen("pos", "POS", Icons.Default.PointOfSale)
     data object Tables : Screen("tables", "Mesas", Icons.Default.TableRestaurant)
     data object Customers : Screen("customers", "Clientes", Icons.Default.People)
@@ -65,6 +71,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     data object Treasury : Screen("treasury", "Caja", Icons.Default.Assessment)
     data object Expenses : Screen("expenses", "Gastos", Icons.Default.AttachMoney)
     data object Backoffice : Screen("backoffice", "Catálogo", Icons.Default.Inventory2)
+    data object Settings : Screen("settings", "Ajustes", Icons.Default.Settings)
 }
 
 @Composable
@@ -72,6 +79,7 @@ fun AppNavigation(
     navController: NavHostController = rememberNavController()
 ) {
     val items = listOf(
+        Screen.Dashboard,
         Screen.Pos,
         Screen.Tables,
         Screen.Customers,
@@ -79,14 +87,15 @@ fun AppNavigation(
         Screen.Kds,
         Screen.Treasury,
         Screen.Expenses,
-        Screen.Backoffice
+        Screen.Backoffice,
+        Screen.Settings
     )
 
     val configuration = LocalConfiguration.current
     val isExpandedOrLandscape = configuration.screenWidthDp >= 600
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Pos.route
+    val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Login.route
 
     fun navigateTo(route: String) {
         navController.navigate(route) {
@@ -96,6 +105,11 @@ fun AppNavigation(
             launchSingleTop = true
             restoreState = true
         }
+    }
+
+    if (currentRoute == Screen.Login.route) {
+        AppNavHost(navController = navController)
+        return
     }
 
     if (isExpandedOrLandscape) {
@@ -136,6 +150,17 @@ fun AppNavigation(
                             onClick = { navigateTo(screen.route) }
                         )
                     }
+                    Spacer(modifier = Modifier.weight(1f))
+                    NavigationRailItem(
+                        icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Cerrar Sesión") },
+                        label = { Text("Salir", style = MaterialTheme.typography.labelSmall) },
+                        selected = false,
+                        onClick = {
+                            navController.navigate(Screen.Login.route) {
+                                popUpTo(0)
+                            }
+                        }
+                    )
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
@@ -210,6 +235,22 @@ fun AppNavigation(
                                 shape = RoundedCornerShape(12.dp)
                             )
                         }
+                        
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        
+                        NavigationDrawerItem(
+                            icon = { Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = "Cerrar Sesión") },
+                            label = { Text("Cerrar Sesión", fontWeight = FontWeight.Medium) },
+                            selected = false,
+                            onClick = {
+                                coroutineScope.launch { drawerState.close() }
+                                navController.navigate(Screen.Login.route) {
+                                    popUpTo(0)
+                                }
+                            },
+                            modifier = Modifier.padding(vertical = 4.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        )
                     }
                 }
             }
@@ -259,9 +300,22 @@ private fun AppNavHost(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Pos.route,
+        startDestination = Screen.Login.route,
         modifier = modifier
     ) {
+        composable(Screen.Login.route) {
+            com.yach.kinetix.backoffice.ui.LoginScreen(
+                onLoginSuccess = {
+                    navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+        composable(Screen.Dashboard.route) {
+            val viewModel: com.yach.kinetix.dashboard.ui.DashboardViewModel = hiltViewModel()
+            com.yach.kinetix.dashboard.ui.DashboardScreen(viewModel = viewModel)
+        }
         composable(Screen.Pos.route) {
             val viewModel: PosViewModel = hiltViewModel()
             PosScreen(viewModel = viewModel)
@@ -271,28 +325,32 @@ private fun AppNavHost(
             TablesScreen(viewModel = viewModel)
         }
         composable(Screen.Customers.route) {
-            val viewModel: CustomersViewModel = hiltViewModel()
-            CustomersScreen(viewModel = viewModel)
+            val viewModel: com.yach.kinetix.frontofhouse.ui.CustomersViewModel = hiltViewModel()
+            com.yach.kinetix.crm.ui.CrmScreen(viewModel = viewModel)
         }
         composable(Screen.SplitCheck.route) {
             val viewModel: SplitCheckViewModel = hiltViewModel()
             SplitCheckScreen(viewModel = viewModel)
         }
         composable(Screen.Kds.route) {
-            val viewModel: KdsViewModel = hiltViewModel()
-            KdsScreen(viewModel = viewModel)
+            val viewModel: com.yach.kinetix.backofhouse.ui.KdsViewModel = hiltViewModel()
+            com.yach.kinetix.kds.ui.KdsScreen(viewModel = viewModel)
         }
         composable(Screen.Treasury.route) {
             val viewModel: TreasuryViewModel = hiltViewModel()
             TreasuryScreen(viewModel = viewModel)
         }
         composable(Screen.Expenses.route) {
-            val viewModel: ExpensesViewModel = hiltViewModel()
-            ExpensesScreen(viewModel = viewModel)
+            val viewModel: com.yach.kinetix.treasury.ui.ExpensesViewModel = hiltViewModel()
+            com.yach.kinetix.expenses.ui.ExpensesScreen(viewModel = viewModel)
         }
         composable(Screen.Backoffice.route) {
             val viewModel: BackofficeViewModel = hiltViewModel()
             BackofficeScreen(viewModel = viewModel)
+        }
+        composable(Screen.Settings.route) {
+            val viewModel: com.yach.kinetix.backoffice.ui.SettingsViewModel = hiltViewModel()
+            com.yach.kinetix.backoffice.ui.SettingsScreen(viewModel = viewModel)
         }
     }
 }

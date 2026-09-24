@@ -61,11 +61,15 @@ class CustomersViewModel @Inject constructor(
         }
     }
 
-    fun selectCustomer(customer: CustomerEntity) {
+    fun selectCustomer(customer: CustomerEntity?) {
         _uiState.update { it.copy(selectedCustomer = customer) }
         viewModelScope.launch {
-            customerDao.getMovementsForCustomer(customer.id).collect { movements ->
-                _uiState.update { it.copy(movements = movements) }
+            if (customer != null) {
+                customerDao.getMovementsForCustomer(customer.id).collect { movements ->
+                    _uiState.update { it.copy(movements = movements) }
+                }
+            } else {
+                _uiState.update { it.copy(movements = emptyList()) }
             }
         }
     }
