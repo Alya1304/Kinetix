@@ -1,7 +1,3 @@
-# Reglas ProGuard para SQLCipher
--keep class net.sqlcipher.** { *; }
--dontwarn net.sqlcipher.**
-
-# Reglas ProGuard para Room y BCrypt
--keep class androidx.room.** { *; }
--dontwarn at.favre.lib.**
+# Restringir únicamente a modelos de Room o entidades que lo requieran explícitamente
+-keep class com.yach.kinetix.**.data.entity.** { *; }
+-keep class * implements androidx.room.RoomDatabase { *; }

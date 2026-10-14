@@ -39,7 +39,7 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun KinetixTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = true, // isSystemInDarkTheme() -> cambiado a true para priorizar el modo oscuro por defecto en POS
     // Deshabilitamos el color dinámico por defecto para mantener fuerte la identidad de la marca (Amber/Cyan)
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit

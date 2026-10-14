@@ -7,13 +7,11 @@ plugins {
 }
 
 android {
-    namespace = "com.yach.kinetix"
-    compileSdk = 35
-
+    compileSdk = 37
     defaultConfig {
         applicationId = "com.yach.kinetix"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0.0"
 
@@ -104,14 +102,14 @@ dependencies {
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
     // --- Persistencia Local (AndroidX Room) ---
-    val roomVersion = "2.6.1"
+    val roomVersion = "2.7.0"
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     implementation("androidx.room:room-paging:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")
 
     // --- Seguridad & Criptografía de Base de Datos (SQLCipher y Jetpack Security) ---
-    implementation("net.zetetic:android-database-sqlcipher:4.5.4")
+    implementation("net.zetetic:android-database-sqlcipher:4.6.1")
     implementation("androidx.sqlite:sqlite-ktx:2.4.0")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 

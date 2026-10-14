@@ -62,7 +62,7 @@ import com.yach.kinetix.treasury.ui.TreasuryViewModel
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     data object Login : Screen("login", "Login", Icons.Default.Person)
-    data object Dashboard : Screen("dashboard", "Dashboard", Icons.Default.Dashboard)
+    data object Dashboard : Screen("dashboard", "Tablero", Icons.Default.Dashboard)
     data object Pos : Screen("pos", "POS", Icons.Default.PointOfSale)
     data object Tables : Screen("tables", "Mesas", Icons.Default.TableRestaurant)
     data object Customers : Screen("customers", "Clientes", Icons.Default.People)
@@ -314,7 +314,30 @@ private fun AppNavHost(
         }
         composable(Screen.Dashboard.route) {
             val viewModel: com.yach.kinetix.dashboard.ui.DashboardViewModel = hiltViewModel()
-            com.yach.kinetix.dashboard.ui.DashboardScreen(viewModel = viewModel)
+            com.yach.kinetix.dashboard.ui.DashboardScreen(
+                viewModel = viewModel,
+                onNavigateToPos = {
+                    navController.navigate(Screen.Pos.route) {
+                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                onNavigateToTables = {
+                    navController.navigate(Screen.Tables.route) {
+                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                onNavigateToKds = {
+                    navController.navigate(Screen.Kds.route) {
+                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            )
         }
         composable(Screen.Pos.route) {
             val viewModel: PosViewModel = hiltViewModel()
